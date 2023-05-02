@@ -30,3 +30,11 @@ shape = SubResource("CapsuleShape3D_4lga4")
 [node name="Mesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.37, 0)
 mesh = SubResource("CapsuleMesh_s1c7i")
+
+[node name="shadow" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 2, 0)
+light_energy = 0.4
+light_negative = true
+spot_attenuation = 0.164939
+spot_angle = 14.1382
+spot_angle_attenuation = 0.0853776
