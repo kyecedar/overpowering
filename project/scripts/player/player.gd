@@ -13,37 +13,42 @@ extends CharacterBody3D
 
 @export var wishspeed       : float =   6.0 # metres per second.
 @export var wishcrouchspeed : float =   3.0
-@export var wishairspeed    : float =   3.0
-@export var wishslidespeed  : float =   0.1 # control spee while sliding
-@export var fastairspeed    : float =   0.1 # control speed in air when going fast
+@export var wishairspeed    : float =   6.0
+@export var wishslidespeed  : float =   0.05 # control speed while sliding
+@export var fastairspeed    : float =   0.05 # control speed in air when going fast
 @export var accel           : float = 100.0 # or max_speed * 10 = 1/10th of a second.
 @export var frict           : float =   7.0 # higher = less slippy - in quake-based games, usually 1-5.
 @export var max_ramp_angle  : float =  45.0 : set = _set_max_ramp_angle # max angle player can go up at full speed.
-@export var fastspeed       : float =  10.5 # how fast is fast, dictates behaviour like fastairspeed
+@export var fastspeed       : float =   9.5 # how fast is fast, dictates behaviour like fastairspeed
 
 @export var grav         : float = ProjectSettings.get_setting("physics/3d/default_gravity")
 @export var jump_impulse : float = 4.8
 
 @export var sprint_multiplier : float =  1.5
-@export var crouch_speed      : float = 20.0
-@export var stand_height      : float =  2.261 # height while standing.
-@export var crouch_height     : float =  1.2 # height while crouching.
+@export var crouch_speed      : float =  6.0
+@export var stand_height      : float =  2.74 # height while standing.
+@export var crouch_height     : float =  1.24 # height while crouching.
 
-@export var head_crouch_height : float = 1.2
-@export var head_stand_height  : float = 2.346
+@export var mega_jump_window     : float = 0.45 # window after crouching for a mega jump.
+@export var mega_jump_multiplier : float = 1.8  # jump height multiplied after crouching.
 
-@export var slidefrict   : float = 1.0
-@export var slidespeed   : float = 6.0
+@export var head_crouch_height : float = 0.85
+@export var head_stand_height  : float = 2.35
+
+@export var slidefrict   : float =  1.0
+@export var slidespeed   : float =  5.0
 
 @export var slopesnap    : float =  1.0
 @export var coyote_time  : float =  0.35
-@export var slipspeed    : float = 10.5
+@export var slipspeed    : float = 11.5
 @export var slipspeedmax : float = 16.0
 @export var slipfrict    : float =  1.0
 
 @onready var head      := $Head
 @onready var camera    := $Head/Camera
 @onready var collision := $Collision
+@onready var leadbonk  := $LeadingBonkRay # area where player would stand. used to check collision before uncrouching.
+@onready var bonk      := $BonkRay
 
 var player_control := true
 
@@ -53,24 +58,28 @@ var movedir  := Vector2.ZERO
 var wishdir  := Vector3.ZERO
 var next_vel := Vector3.ZERO
 
-var vertical_vel  : float = 0.0
-var current_speed : float = 0.0
-var add_speed     : float = 0.0
-var total_vel     : float = 0.0
+var vertical_vel        : float = 0.0
+var current_speed       : float = 0.0
+var add_speed           : float = 0.0
+var total_vel           : float = 0.0
 
-var sprinting    := false # is player sprinting?
-var crouching    := false # is player crouching?
-var force_crouch := false # is player forced to crouch? are they in an area where they can't stand up?
-var sliding      := false # is player sliding?
-var wish_jump    := false # is player jump queued? jump key can be held before hitting the ground.
-var coyote_timer := coyote_time
+var sprinting       := false # is player sprinting?
+var crouching       := false # is player crouching?
+var force_crouch    := false # is player forced to crouch? are they in an area where they can't stand up?
+var sliding         := false # is player sliding?
+var wish_jump       := false # is player jump queued? jump key can be held before hitting the ground.
+var coyote_timer    := coyote_time
+var mega_jump_timer := mega_jump_window
+
+var head_default_position := Vector3.ZERO
+var head_crouch_offset    : float = 0.0
 
 
 
 
 
 func _ready() -> void:
-	pass
+	head_default_position = head.position
 
 
 
@@ -85,13 +94,45 @@ func _physics_process(delta) -> void:
 	# wishdir is our normalized horizontal input.
 	wishdir = Vector3(movedir.x, 0, movedir.y).rotated(Vector3.UP, self.global_transform.basis.get_euler().y).normalized()
 	
+	leadbonk.position.y = collision.shape.height
+	
+	leadbonk.target_position.y = stand_height - collision.shape.height
+	leadbonk.target_position.x = velocity.x / 2
+	leadbonk.target_position.z = velocity.z / 2
+	
+	bonk.position.y = leadbonk.position.y
+	bonk.target_position.y = leadbonk.target_position.y
+	
+	leadbonk.rotation.y = -rotation.y # cancelling out player rotation.
+	
+	# print(sliding)
+	
 	if player_control:
 		queue_jump()
 		handle_sprint()
 		handle_crouch()
 	
-	# clamp height.
-	collision.shape.height = clamp(collision.shape.height, crouch_height, stand_height)
+	if mega_jump_timer > 0:
+			mega_jump_timer -= delta
+	
+	# crouching.
+	if crouching or force_crouch:
+		if is_on_floor():
+			# reset mega jump timer.
+			mega_jump_timer = mega_jump_window
+		
+		# adjust collision shape and position, head position.
+		collision.shape.height = lerp(collision.shape.height, crouch_height, crouch_speed * delta)
+		collision.position.y = collision.shape.height / 2
+		head.position.y = lerp(head.position.y, head_crouch_height, crouch_speed * delta)
+	else:
+		# adjust collision shape and position, head position.
+		if collision.shape.height > stand_height - 0.01: # round up when adequate.
+			collision.shape.height = stand_height
+		else:
+			collision.shape.height = lerp(collision.shape.height, stand_height, crouch_speed * delta)
+		collision.position.y = collision.shape.height / 2
+		head.position.y = lerp(head.position.y, head_stand_height, crouch_speed * delta)
 	
 	# movement.
 	if is_on_floor():
@@ -125,11 +166,10 @@ func _physics_process(delta) -> void:
 	if is_on_ceiling():
 		vertical_vel = 0
 	
-	# crouching.
-	if crouching:
-		collision.shape.height = lerp(collision.shape.height, crouch_height, crouch_speed * delta)
-	else:
-		collision.shape.height += crouch_speed * delta
+	$Mesh.mesh.height = collision.shape.height
+	$Mesh.position.y  = collision.position.y
+	
+	collision.shape.height = clamp(collision.shape.height, crouch_height, stand_height)
 	
 	if Input.is_action_just_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -137,13 +177,13 @@ func _physics_process(delta) -> void:
 
 func _input(event: InputEvent) -> void:
 	# Camera rotation.
-	if event is InputEventMouseMotion && player_control:
+	if event is InputEventMouseMotion and player_control:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			rotate_y(-event.relative.x * look_sens.x)
 			head.rotate_x(-event.relative.y * look_sens.y)
 			
 			head.rotation.x = clamp(head.rotation.x, -PI/2, PI/2)
-	elif event is InputEventMouseButton && Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+	elif event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	pass
 
@@ -167,12 +207,13 @@ func friction(input_vel: Vector3, delta: float) -> Vector3:
 		
 		sliding = false
 		
-		if min(max(speed - slipspeed, 0), slipspeedmax - slipspeed) / (slipspeedmax - slipspeed) > 0:
-			newfrict = slipfrict
-		elif crouching:
-			if speed >= slidespeed:
+		if crouching:
+			if velocity.length() >= slidespeed:
 				newfrict = slidefrict
 				sliding = true
+		
+		elif min(max(speed - slipspeed, 0), slipspeedmax - slipspeed) / (slipspeedmax - slipspeed) > 0:
+			newfrict = slipfrict
 		
 		var drop := speed * newfrict * delta # amount of speed to be reduced by friction.
 		scaled_vel = input_vel * max(speed - drop, 0) / speed
@@ -188,7 +229,7 @@ func move_ground(input_vel: Vector3, delta: float) -> void:
 	
 	var speed : float = wishspeed
 	
-	if crouching:
+	if crouching or force_crouch:
 		speed = wishslidespeed if sliding else wishcrouchspeed
 	if sprinting:
 		speed *= sprint_multiplier
@@ -217,6 +258,7 @@ func move_air(input_vel: Vector3, delta: float) -> void:
 	# first work on horiztonal.
 	next_vel.x = input_vel.x
 	next_vel.z = input_vel.z
+	
 	next_vel = accelerate(wishdir, next_vel, accel, airspeed, delta)
 	
 	# then vertical.
@@ -238,9 +280,22 @@ func queue_jump() -> void:
 		wish_jump = false
 
 func jump(delta: float) -> void:
+	# zero coyote timer.
 	coyote_timer = 0
-	floor_snap_length = 0 # disable snapping just for the jump.
-	vertical_vel += jump_impulse
+	
+	# disable floor snapping just for the jump.
+	floor_snap_length = 0
+	
+	var impulse = jump_impulse
+	
+	# mega jump and zero its' timer.
+	if !crouching && mega_jump_timer > 0:
+		impulse *= mega_jump_multiplier
+		mega_jump_timer = 0
+	
+	# apply impulse.
+	vertical_vel = impulse
+	
 	move_air(velocity, delta) # mimic quake's first frame landing.
 	wish_jump = false # player would need to press jump again.
 
@@ -269,7 +324,11 @@ func handle_crouch() -> void:
 		crouching = true
 	elif Input.is_action_just_released("move_crouch"):
 		crouching = false
-
+	
+	var isbonk = (leadbonk.is_colliding() and leadbonk.get_collision_normal().dot(Vector3.DOWN) > 0) or bonk.is_colliding()
+	var notstanding = collision.shape.height < stand_height - 0.2
+	
+	force_crouch = isbonk and notstanding
 
 
 

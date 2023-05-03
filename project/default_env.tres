@@ -12,3 +12,14 @@ sky_material = SubResource("ProceduralSkyMaterial_sjhi0")
 [resource]
 background_mode = 2
 sky = SubResource("Sky_ek8yn")
+tonemap_mode = 2
+tonemap_exposure = 0.81
+tonemap_white = 1.03
+sdfgi_energy = 0.7
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.02
+volumetric_fog_length = 500.0
+adjustment_enabled = true
+adjustment_brightness = 0.91
+adjustment_contrast = 1.11
+adjustment_saturation = 0.66

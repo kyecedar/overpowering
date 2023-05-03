@@ -1,8 +1,9 @@
-[gd_scene load_steps=8 format=3 uid="uid://2ilp7gumxx26"]
+[gd_scene load_steps=9 format=3 uid="uid://2ilp7gumxx26"]
 
 [ext_resource type="PackedScene" uid="uid://hsa3asvkbe7t" path="res://scenes/Player.tscn" id="1_81x0t"]
 [ext_resource type="Texture2D" uid="uid://c4njtli6rnloe" path="res://assets/placeholders/kenny_grid_textures/Dark/texture_08.png" id="1_snswi"]
 [ext_resource type="Texture2D" uid="uid://c74l1k6jsl2d2" path="res://assets/placeholders/kenny_grid_textures/Red/texture_09.png" id="2_yc3su"]
+[ext_resource type="Environment" uid="uid://cacjnp37pwhc7" path="res://default_env.tres" id="4_urtdy"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gojkx"]
 albedo_texture = ExtResource("1_snswi")
@@ -63,7 +64,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
 material_override = SubResource("StandardMaterial3D_2j6gi")
 use_collision = true
 collision_layer = 7
-collision_mask = 0
+collision_mask = 7
 
 [node name="CSGPolygon3D" type="CSGPolygon3D" parent="CSGCombiner3D"]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 2, 0, 5)
@@ -118,6 +119,10 @@ size = Vector3(1, 2, 18)
 transform = Transform3D(1, 0, 2.08616e-07, 0, 1, 0, -2.08616e-07, 0, 1, 9, 8.5, 17.5)
 size = Vector3(10, 1, 5)
 
+[node name="CSGBox3D6" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 2.08616e-07, 0, 1, 0, -2.08616e-07, 0, 1, 13.5, 4, 17.5)
+size = Vector3(1, 8, 5)
+
 [node name="CSGBox3D4" type="CSGBox3D" parent="CSGCombiner3D"]
 transform = Transform3D(1, 0, 2.08616e-07, 0, 1, 0, -2.08616e-07, 0, 1, 8, 5.5, 15)
 size = Vector3(10, 1, 10)
@@ -133,3 +138,6 @@ auto_jump = false
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(-0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, 0.5, -0.5, 0, 5, 0)
 shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("4_urtdy")
