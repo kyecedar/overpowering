@@ -29,8 +29,9 @@ extends CharacterBody3D
 @export var stand_height      : float =  2.74 # height while standing.
 @export var crouch_height     : float =  1.24 # height while crouching.
 
-@export var mega_jump_window     : float = 0.45 # window after crouching for a mega jump.
 @export var mega_jump_multiplier : float = 1.8  # jump height multiplied after crouching.
+@export var mega_jump_window     : float = 0.45 # window after crouching for a mega jump.
+@export var mega_jump_max_charge : float = 0.5
 
 @export var head_crouch_height : float = 0.85
 @export var head_stand_height  : float = 2.35
@@ -50,6 +51,9 @@ extends CharacterBody3D
 @onready var leadbonk  := $LeadingBonkRay # area where player would stand. used to check collision before uncrouching.
 @onready var bonk      := $BonkRay
 
+# accessibility
+@export var always_mega_jump := false
+
 var player_control := true
 
 var terminal_vel : float = grav * -5 # when reached, stop increasing fall speed.
@@ -68,8 +72,10 @@ var crouching       := false # is player crouching?
 var force_crouch    := false # is player forced to crouch? are they in an area where they can't stand up?
 var sliding         := false # is player sliding?
 var wish_jump       := false # is player jump queued? jump key can be held before hitting the ground.
-var coyote_timer    := coyote_time
-var mega_jump_timer := mega_jump_window
+
+var coyote_timer     := coyote_time
+var mega_jump_timer  := mega_jump_window
+var mega_jump_charge : float = 0.0
 
 var head_default_position := Vector3.ZERO
 var head_crouch_offset    : float = 0.0
@@ -113,13 +119,18 @@ func _physics_process(delta) -> void:
 		handle_crouch()
 	
 	if mega_jump_timer > 0:
-			mega_jump_timer -= delta
+		mega_jump_timer -= delta
+	
+	# mega jump charge won't go down unless the window is up.
+	elif mega_jump_charge > 0:
+		mega_jump_charge = max(0, mega_jump_charge - delta)
 	
 	# crouching.
 	if crouching or force_crouch:
 		if is_on_floor():
 			# reset mega jump timer.
-			mega_jump_timer = mega_jump_window
+			mega_jump_timer  = mega_jump_window
+			mega_jump_charge = min(mega_jump_max_charge, mega_jump_charge + delta)
 		
 		# adjust collision shape and position, head position.
 		collision.shape.height = lerp(collision.shape.height, crouch_height, crouch_speed * delta)
@@ -133,6 +144,8 @@ func _physics_process(delta) -> void:
 			collision.shape.height = lerp(collision.shape.height, stand_height, crouch_speed * delta)
 		collision.position.y = collision.shape.height / 2
 		head.position.y = lerp(head.position.y, head_stand_height, crouch_speed * delta)
+	
+	print("mega jump charge ", mega_jump_charge)
 	
 	# movement.
 	if is_on_floor():
@@ -289,9 +302,13 @@ func jump(delta: float) -> void:
 	var impulse = jump_impulse
 	
 	# mega jump and zero its' timer.
-	if !crouching && mega_jump_timer > 0:
+	if always_mega_jump or mega_jump_charge == mega_jump_max_charge:
 		impulse *= mega_jump_multiplier
 		mega_jump_timer = 0
+		
+		# zero mega jump timers.
+		mega_jump_timer  = 0
+		mega_jump_charge = 0
 	
 	# apply impulse.
 	vertical_vel = impulse
