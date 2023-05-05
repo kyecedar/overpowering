@@ -8,35 +8,34 @@ extends CharacterBody3D
 @export var look_sens := Vector2(0.001, 0.001)
 @export var auto_jump    := false # auto bhop.
 
-@export var toggle_crouch := false
-@export var toggle_sprint := false
-
-@export var wishspeed       : float =   6.0 # metres per second.
-@export var wishcrouchspeed : float =   3.0
-@export var wishairspeed    : float =   6.0
-@export var wishslidespeed  : float =   0.05 # control speed while sliding
-@export var fastairspeed    : float =   0.05 # control speed in air when going fast
-@export var accel           : float = 100.0 # or max_speed * 10 = 1/10th of a second.
+@export var wishspeed       : float =   4.0 # metres per second.
+@export var wishcrouchspeed : float =   1.5
+@export var wishairspeed    : float =   2.0
+@export var wishslidespeed  : float =   0.02 # control speed while sliding
+@export var fastairspeed    : float =   0.02 # control speed in air when going fast
+@export var accel           : float =  80.0 # or max_speed * 10 = 1/10th of a second.
 @export var frict           : float =   7.0 # higher = less slippy - in quake-based games, usually 1-5.
 @export var max_ramp_angle  : float =  45.0 : set = _set_max_ramp_angle # max angle player can go up at full speed.
-@export var fastspeed       : float =   9.5 # how fast is fast, dictates behaviour like fastairspeed
+@export var min_slide_angle : float =  25.0 # min angle player would slide on ramps
+@export var max_slide_speed : float =  14.0 # max speed 
+@export var fastspeed       : float =   5.5 # how fast is fast, dictates behaviour like fastairspeed
 
 @export var grav         : float = ProjectSettings.get_setting("physics/3d/default_gravity")
-@export var jump_impulse : float = 4.8
+@export var jump_impulse : float = 4.5
 
 @export var sprint_multiplier : float =  1.5
 @export var crouch_speed      : float =  6.0
-@export var stand_height      : float =  2.74 # height while standing.
-@export var crouch_height     : float =  1.24 # height while crouching.
+@export var stand_height      : float =  1.74 # height while standing.
+@export var crouch_height     : float =  0.85 # height while crouching.
 
 @export var mega_jump_multiplier : float = 1.8  # jump height multiplied after crouching.
 @export var mega_jump_window     : float = 0.45 # window after crouching for a mega jump.
 @export var mega_jump_max_charge : float = 0.5
 
-@export var head_crouch_height : float = 0.85
-@export var head_stand_height  : float = 2.35
+@export var head_crouch_height : float = 0.56
+@export var head_stand_height  : float = 1.35
 
-@export var slidefrict   : float =  1.0
+@export var slidefrict   : float =  -1.0
 @export var slidespeed   : float =  5.0
 
 @export var slopesnap    : float =  1.0
@@ -50,8 +49,11 @@ extends CharacterBody3D
 @onready var collision := $Collision
 @onready var leadbonk  := $LeadingBonkRay # area where player would stand. used to check collision before uncrouching.
 @onready var bonk      := $BonkRay
+@onready var floorray  := $FloorDistance
 
 # accessibility
+@export var toggle_crouch    := false
+@export var toggle_sprint    := false
 @export var always_mega_jump := false
 
 var player_control := true
@@ -66,6 +68,7 @@ var vertical_vel        : float = 0.0
 var current_speed       : float = 0.0
 var add_speed           : float = 0.0
 var total_vel           : float = 0.0
+var floor_distance      : float = -1
 
 var sprinting       := false # is player sprinting?
 var crouching       := false # is player crouching?
@@ -89,9 +92,17 @@ func _ready() -> void:
 
 
 
+func _process(_delta) -> void:
+	floor_distance = snappedf(floorray.get_collision_point().distance_to(floorray.global_position) + 0.001, 0.01)
+	#print(floor_distance)
+
+
+
 func _physics_process(delta) -> void:
 	total_vel = velocity.length()
 	#print(total_vel)
+	
+	
 	if player_control:
 		movedir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward").normalized()
 	else:
@@ -99,6 +110,7 @@ func _physics_process(delta) -> void:
 	
 	# wishdir is our normalized horizontal input.
 	wishdir = Vector3(movedir.x, 0, movedir.y).rotated(Vector3.UP, self.global_transform.basis.get_euler().y).normalized()
+	
 	
 	leadbonk.position.y = collision.shape.height
 	
@@ -111,27 +123,15 @@ func _physics_process(delta) -> void:
 	
 	leadbonk.rotation.y = -rotation.y # cancelling out player rotation.
 	
-	# print(sliding)
 	
 	if player_control:
 		queue_jump()
 		handle_sprint()
 		handle_crouch()
 	
-	if mega_jump_timer > 0:
-		mega_jump_timer -= delta
-	
-	# mega jump charge won't go down unless the window is up.
-	elif mega_jump_charge > 0:
-		mega_jump_charge = max(0, mega_jump_charge - delta)
 	
 	# crouching.
 	if crouching or force_crouch:
-		if is_on_floor():
-			# reset mega jump timer.
-			mega_jump_timer  = mega_jump_window
-			mega_jump_charge = min(mega_jump_max_charge, mega_jump_charge + delta)
-		
 		# adjust collision shape and position, head position.
 		collision.shape.height = lerp(collision.shape.height, crouch_height, crouch_speed * delta)
 		collision.position.y = collision.shape.height / 2
@@ -145,7 +145,6 @@ func _physics_process(delta) -> void:
 		collision.position.y = collision.shape.height / 2
 		head.position.y = lerp(head.position.y, head_stand_height, crouch_speed * delta)
 	
-	print("mega jump charge ", mega_jump_charge)
 	
 	# movement.
 	if is_on_floor():
@@ -158,9 +157,6 @@ func _physics_process(delta) -> void:
 		else:
 			floor_snap_length = slopesnap
 			move_ground(velocity, delta)
-			
-			if is_on_floor(): # launch off the floor.
-				vertical_vel = -velocity.dot(get_floor_normal())
 	
 	else: # air time 😎, no friction.
 		floor_snap_length = slopesnap if velocity.length() < slipspeed else 0
@@ -178,6 +174,25 @@ func _physics_process(delta) -> void:
 	
 	if is_on_ceiling():
 		vertical_vel = 0
+	
+	
+	# deplete mega jump timer.
+	if mega_jump_timer > 0:
+		mega_jump_timer -= delta
+	
+	# mega jump charge won't go down unless the window is up.
+	elif mega_jump_charge > 0:
+		mega_jump_charge = max(0, mega_jump_charge - delta)
+	
+	if crouching:
+		# only allow mega jump.
+		if is_on_floor():
+			# reset mega jump timer.
+			mega_jump_timer = mega_jump_window
+		
+			# charge mega jump.
+			mega_jump_charge = min(mega_jump_max_charge, mega_jump_charge + delta)
+	
 	
 	$Mesh.mesh.height = collision.shape.height
 	$Mesh.position.y  = collision.position.y
@@ -244,6 +259,15 @@ func move_ground(input_vel: Vector3, delta: float) -> void:
 	
 	if crouching or force_crouch:
 		speed = wishslidespeed if sliding else wishcrouchspeed
+		
+		if sliding:
+			if get_floor_angle() >= deg_to_rad(min_slide_angle):
+				
+			
+			speed = wishslidespeed
+		
+		speed 
+		#print(sliding)
 	if sprinting:
 		speed *= sprint_multiplier
 	
@@ -256,6 +280,9 @@ func move_ground(input_vel: Vector3, delta: float) -> void:
 	# then vertical.
 	next_vel.y = vertical_vel
 	
+	# launch off the floor.
+	next_vel.y = -next_vel.dot(get_floor_normal())
+	
 	velocity = next_vel
 	
 	move_and_slide()
@@ -266,6 +293,7 @@ func move_air(input_vel: Vector3, delta: float) -> void:
 	next_vel = Vector3.ZERO
 	
 	var airspeed : float = wishairspeed if total_vel < fastspeed else fastairspeed
+	#print(airspeed)
 	# print(airspeed)
 	
 	# first work on horiztonal.
